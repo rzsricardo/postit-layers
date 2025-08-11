@@ -1,18 +1,10 @@
-# Post-it Layers (PWA) — GitHub Pages
+# Post-it Layers (PWA) — GitHub Pages (Patched)
+This build avoids modern JS features that the inline Babel transformer can choke on (e.g., empty `catch {}` and optional chaining).
 
-**Quick deploy (no CLI):**
-1. Create a new public repo on GitHub (e.g. `postit-layers`).
-2. Upload these files (drag & drop the *contents* of the folder — `index.html`, `sw.js`, `manifest.json`, `.nojekyll`).
-3. Go to **Settings → Pages**.
-4. Under **Build and deployment**, set **Source** = “Deploy from a branch”.
-5. Choose **Branch** = `main` (or `master`) and **Folder** = `/ (root)` → **Save**.
-6. Wait ~1–2 minutes. Your site will appear at:
-   - `https://<your-username>.github.io/<repo-name>/`
+**Deploy**
+1. Create a *public* repo (e.g., `postit-layers`).
+2. Upload these files at the repo root: `index.html`, `sw.js`, `manifest.json`, `.nojekyll`, `README.md`.
+3. Settings → Pages → Source: *Deploy from a branch* → Branch: `main` → Folder: `/ (root)` → Save.
+4. Wait 1–2 minutes → open: `https://<user>.github.io/<repo>/`.
 
-**Install on Android:**
-- Open the URL in Chrome → menu (⋮) → **Add to Home screen**.
-
-**Notes**
-- This build uses CDN scripts (`unpkg.com`) and inline script. GitHub Pages allows it by default.
-- If you see a blank page, open **DevTools → Console** to check errors.
-- To clear a stuck service worker after an update: **DevTools → Application → Service Workers → Unregister**, then hard refresh.
+Install on Android: open the URL in Chrome → menu → Add to Home screen.
