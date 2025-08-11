@@ -1,0 +1,16 @@
+{
+  "name": "Post-it Layers",
+  "short_name": "Post-its",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

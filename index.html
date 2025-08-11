@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Post-it Layers (PWA)</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#111827">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='48' fill='%23111827'/%3E%3Crect x='36' y='36' width='184' height='184' rx='20' fill='%23fde68a'/%3E%3C/svg%3E">
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'; background: linear-gradient(#fafafa, #efefef); color: #111827; }
+    .shadow { box-shadow: 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.08); }
+    .rounded-2xl { border-radius: 1rem; }
+    .rounded-xl { border-radius: .75rem; }
+    .border { border: 1px solid rgba(0,0,0,.12); }
+    .btn { padding: .375rem .75rem; border: 1px solid rgba(0,0,0,.12); border-radius: .75rem; background: #fff8; backdrop-filter: blur(8px); cursor: pointer; }
+    .btn:hover { background: #fff; }
+    .panel { background: #fffE; backdrop-filter: blur(8px); }
+    .note { user-select: none; }
+    .gridbg { background-size: 32px 32px; background-image:
+      linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+    }
+    textarea { font: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React + Babel (for quick prototype; production would be bundled) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    function uid(prefix = "id") {
+      return `${prefix}_` + Math.random().toString(36).slice(2,9);
+    }
+
+    const DEFAULT_NOTE_SIZE = { w: 180, h: 140 };
+    const STORAGE_KEY = "postit_layers_app_v01";
+    const COLORS = ["#fde68a","#a7f3d0","#bfdbfe","#fecaca","#ddd6fe","#e9d5ff","#fbcfe8"];
+
+    function loadInitial() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      const layerA = { id: uid("layer"), name: "Estratégia", visible: true };
+      const layerB = { id: uid("layer"), name: "Tarefas", visible: true };
+      const layerC = { id: uid("layer"), name: "Inspirações", visible: false };
+
+      const n1 = { id: uid("note"), ownerLayerId: layerA.id, x: 100, y: 80,
+        text: "Visão geral do projeto\n— público-alvo\n— proposta de valor",
+        color: COLORS[0], w: DEFAULT_NOTE_SIZE.w, h: DEFAULT_NOTE_SIZE.h,
+        styleOverrides: { [layerB.id]: { visible: true, color: COLORS[2], opacity: .9 } } };
+      const n2 = { id: uid("note"), ownerLayerId: layerB.id, x: 420, y: 220,
+        text: "MVP backlog\n- Canvas\n- Camadas\n- LocalStorage",
+        color: COLORS[1], w: DEFAULT_NOTE_SIZE.w, h: DEFAULT_NOTE_SIZE.h,
+        styleOverrides: {} };
+      const n3 = { id: uid("note"), ownerLayerId: layerA.id, x: 700, y: 120,
+        text: "Riscos\n- Escopo\n- Prazo\n- Dívida técnica",
+        color: COLORS[3], w: DEFAULT_NOTE_SIZE.w, h: DEFAULT_NOTE_SIZE.h,
+        styleOverrides: { [layerC.id]: { visible: true, opacity: .6 } } };
+
+      return { layers: [layerA, layerB, layerC], notes: [n1, n2, n3], activeLayerId: layerA.id };
+    }
+
+    function App() {
+      const [state, setState] = useState(loadInitial);
+      const { layers, notes, activeLayerId } = state;
+
+      useEffect(() => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+      }, [state]);
+
+      const activeLayer = useMemo(() => layers.find(l => l.id === activeLayerId) || layers[0], [layers, activeLayerId]);
+
+      // camera / pan-zoom
+      const canvasRef = useRef(null);
+      const [camera, setCamera] = useState({ x: 0, y: 0, scale: 1 });
+      const isPanningRef = useRef(false);
+      const lastPosRef = useRef({ x: 0, y: 0 });
+
+      const worldToScreen = (x, y) => ({ x: (x + camera.x) * camera.scale, y: (y + camera.y) * camera.scale });
+      const screenToWorld = (sx, sy) => ({ x: sx / camera.scale - camera.x, y: sy / camera.scale - camera.y });
+
+      const onWheel = (e) => {
+        e.preventDefault();
+        const rect = canvasRef.current.getBoundingClientRect();
+        const mouse = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        const delta = -Math.sign(e.deltaY) * 0.1;
+        const newScale = Math.min(3, Math.max(.25, camera.scale * (1 + delta)));
+        setCamera(c => ({ ...c, scale: newScale }));
+      };
+
+      const onBackgroundMouseDown = (e) => {
+        if (e.button !== 0) return;
+        isPanningRef.current = true;
+        lastPosRef.current = { x: e.clientX, y: e.clientY };
+      };
+      const onMouseMove = (e) => {
+        if (!isPanningRef.current) return;
+        const dx = (e.clientX - lastPosRef.current.x) / camera.scale;
+        const dy = (e.clientY - lastPosRef.current.y) / camera.scale;
+        lastPosRef.current = { x: e.clientX, y: e.clientY };
+        setCamera(c => ({ ...c, x: c.x + dx, y: c.y + dy }));
+      };
+      const onMouseUp = () => (isPanningRef.current = false);
+
+      useEffect(() => {
+        const el = canvasRef.current;
+        el.addEventListener("wheel", onWheel, { passive: false });
+        window.addEventListener("mouseup", onMouseUp);
+        window.addEventListener("mousemove", onMouseMove);
+        return () => {
+          el.removeEventListener("wheel", onWheel);
+          window.removeEventListener("mouseup", onMouseUp);
+          window.removeEventListener("mousemove", onMouseMove);
+        };
+      });
+
+      const setLayers = (fn) => setState(s => ({ ...s, layers: fn(s.layers) }));
+      const setNotes = (fn) => setState(s => ({ ...s, notes: fn(s.notes) }));
+
+      const visibleLayerIds = useMemo(() => new Set(layers.filter(l => l.visible).map(l => l.id)), [layers]);
+
+      function noteEffectiveStyle(note) {
+        const a = note.styleOverrides?.[activeLayerId];
+        if (a?.visible) return { color: a.color ?? note.color, opacity: a.opacity ?? 1 };
+        if (visibleLayerIds.has(note.ownerLayerId)) return { color: note.color, opacity: 1 };
+        for (const lid of Object.keys(note.styleOverrides || {})) {
+          const o = note.styleOverrides[lid];
+          if (visibleLayerIds.has(lid) && o.visible) return { color: o.color ?? note.color, opacity: o.opacity ?? 1 };
+        }
+        return null;
+      }
+
+      const [draggingId, setDraggingId] = useState(null);
+
+      function startDragNote(note, e) {
+        e.stopPropagation();
+        setDraggingId(note.id);
+        const start = { x: e.clientX, y: e.clientY };
+        const startPos = { x: note.x, y: note.y };
+        const move = (ev) => {
+          if (draggingId !== note.id) return;
+          const dx = (ev.clientX - start.x) / camera.scale;
+          const dy = (ev.clientY - start.y) / camera.scale;
+          setNotes(arr => arr.map(n => n.id === note.id ? { ...n, x: startPos.x + dx, y: startPos.y + dy } : n));
+        };
+        const up = () => {
+          setDraggingId(null);
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
+
+      function createNote() {
+        if (!activeLayer) return;
+        const newNote = {
+          id: uid("note"),
+          ownerLayerId: activeLayer.id,
+          x: -camera.x + 100 / camera.scale,
+          y: -camera.y + 100 / camera.scale,
+          text: "Novo post-it",
+          color: COLORS[Math.floor(Math.random() * COLORS.length)],
+          w: DEFAULT_NOTE_SIZE.w, h: DEFAULT_NOTE_SIZE.h,
+          styleOverrides: {},
+        };
+        setNotes(arr => [...arr, newNote]);
+      }
+
+      function duplicateNote(note) {
+        const copy = { ...note, id: uid("note"), x: note.x + 24, y: note.y + 24 };
+        setNotes(arr => [...arr, copy]);
+      }
+
+      function deleteNote(note) {
+        setNotes(arr => arr.filter(n => n.id !== note.id));
+      }
+
+      function resizeNote(note, e) {
+        e.stopPropagation();
+        const start = { x: e.clientX, y: e.clientY };
+        const startSize = { w: note.w, h: note.h };
+        const move = (ev) => {
+          const dx = (ev.clientX - start.x) / camera.scale;
+          const dy = (ev.clientY - start.y) / camera.scale;
+          setNotes(arr => arr.map(n => n.id === note.id ? { ...n, w: Math.max(120, startSize.w + dx), h: Math.max(100, startSize.h + dy) } : n));
+        };
+        const up = () => {
+          window.removeEventListener("mousemove", move);
+          window.removeEventListener("mouseup", up);
+        };
+        window.addEventListener("mousemove", move);
+        window.addEventListener("mouseup", up);
+      }
+
+      function setActiveLayer(id) { setState(s => ({ ...s, activeLayerId: id })); }
+      function toggleLayerVisibility(id) { setLayers(arr => arr.map(l => l.id === id ? { ...l, visible: !l.visible } : l)); }
+      function addLayer() {
+        const name = prompt("Nome da camada:")?.trim();
+        if (!name) return;
+        const layer = { id: uid("layer"), name, visible: true };
+        setLayers(arr => [...arr, layer]);
+        setActiveLayer(layer.id);
+      }
+      function renameLayer(layer) {
+        const name = prompt("Novo nome:", layer.name)?.trim();
+        if (!name) return;
+        setLayers(arr => arr.map(l => l.id === layer.id ? { ...l, name } : l));
+      }
+      function deleteLayer(layer) {
+        const hasOwned = notes.some(n => n.ownerLayerId === layer.id);
+        if (hasOwned) { alert("Não é possível excluir: a camada possui post-its proprietários."); return; }
+        if (!confirm(`Excluir a camada "${layer.name}"?`)) return;
+        setLayers(arr => arr.filter(l => l.id !== layer.id));
+        setNotes(arr => arr.map(n => {
+          const copy = { ...n };
+          if (copy.styleOverrides && copy.styleOverrides[layer.id]) {
+            const o = { ...copy.styleOverrides }; delete o[layer.id]; copy.styleOverrides = o;
+          }
+          return copy;
+        }));
+        if (activeLayerId === layer.id && layers.length) setActiveLayer(layers[0].id);
+      }
+      function referenceInActiveLayer(note) {
+        if (!activeLayer) return;
+        if (note.ownerLayerId === activeLayer.id) { alert("Este post-it já pertence à camada ativa."); return; }
+        setNotes(arr => arr.map(n => n.id === note.id ? {
+          ...n, styleOverrides: { ...(n.styleOverrides || {}), [activeLayer.id]: { ...(n.styleOverrides?.[activeLayer.id] || {}), visible: true } }
+        } : n));
+      }
+      function setColor(note, color) {
+        if (activeLayer && note.ownerLayerId === activeLayer.id) {
+          setNotes(arr => arr.map(n => n.id === note.id ? { ...n, color } : n));
+        } else if (activeLayer) {
+          setNotes(arr => arr.map(n => n.id === note.id ? {
+            ...n, styleOverrides: { ...(n.styleOverrides || {}), [activeLayer.id]: { ...(n.styleOverrides?.[activeLayer.id] || {}), visible: true, color } }
+          } : n));
+        }
+      }
+      function toggleReferenceVisibility(note) {
+        if (!activeLayer) return;
+        setNotes(arr => arr.map(n => {
+          if (n.id !== note.id) return n;
+          const ov = n.styleOverrides?.[activeLayer.id] || {};
+          const next = { ...n, styleOverrides: { ...(n.styleOverrides || {}) } };
+          next.styleOverrides[activeLayer.id] = { ...ov, visible: !ov.visible };
+          return next;
+        }));
+      }
+
+      function NoteCard({ note }) {
+        const style = noteEffectiveStyle(note);
+        if (!style) return null;
+        const screen = worldToScreen(note.x, note.y);
+        return (
+          <div className="note absolute shadow rounded-xl border"
+            style={{ position: 'absolute', left: screen.x, top: screen.y, width: note.w * camera.scale, height: note.h * camera.scale, transform: 'translate(-50%, -50%)', background: style.color, opacity: style.opacity ?? 1, cursor: 'grab' }}
+            onMouseDown={(e) => startDragNote(note, e)}
+          >
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding: '6px 10px', fontSize: 13, fontWeight: 600 }}>
+              <span>{note.ownerLayerId === activeLayerId ? "(owner) " : ""}Post-it</span>
+              <div style={{ display:'flex', gap: 6 }}>
+                <button className="btn" onClick={(e)=>{e.stopPropagation(); duplicateNote(note);}} title="Duplicar">⧉</button>
+                <button className="btn" onClick={(e)=>{e.stopPropagation(); referenceInActiveLayer(note);}} title="Referenciar">@</button>
+                <button className="btn" onClick={(e)=>{e.stopPropagation(); deleteNote(note);}} title="Excluir">✕</button>
+              </div>
+            </div>
+            <textarea
+              style={{ width:'100%', height: `calc(100% - 48px)`, padding: 10, border: 'none', outline: 'none', background: 'transparent', fontSize: 14 }}
+              value={note.text}
+              onChange={(e)=> setNotes(arr => arr.map(n => n.id === note.id ? { ...n, text: e.target.value } : n))}
+              onMouseDown={(e)=> e.stopPropagation()}
+            />
+            <div title="Redimensionar" style={{ position:'absolute', bottom: 6, right: 6, width: 16, height: 16, background: '#fff8', border: '1px solid rgba(0,0,0,.2)', borderRadius: 4, cursor:'nwse-resize' }}
+              onMouseDown={(e)=> resizeNote(note, e)}
+            />
+          </div>
+        );
+      }
+
+      function Toolbar() {
+        return (
+          <div className="shadow rounded-2xl panel" style={{ position:'fixed', top: 12, left: 12, zIndex: 50, display:'flex', alignItems:'center', gap: 8, padding: 8 }}>
+            <button className="btn" onClick={createNote}>+ Post-it</button>
+            <div style={{ width:1, height:24, background:'rgba(0,0,0,.1)' }} />
+            <button className="btn" title="Zoom -" onClick={()=> setCamera(c => ({ ...c, scale: Math.max(.25, c.scale * .9) }))}>−</button>
+            <button className="btn" title="Reset" onClick={()=> setCamera({ x:0, y:0, scale:1 })}>1:1</button>
+            <button className="btn" title="Zoom +" onClick={()=> setCamera(c => ({ ...c, scale: Math.min(3, c.scale * 1.1) }))}>+</button>
+          </div>
+        );
+      }
+
+      function LayerPanel() {
+        return (
+          <div className="shadow rounded-2xl panel border" style={{ position:'fixed', top: 12, right: 12, zIndex: 50, width: 300, padding: 12 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 8 }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>Camadas</div>
+              <button className="btn" onClick={addLayer}>+ Nova</button>
+            </div>
+            <div style={{ maxHeight: '60vh', overflow:'auto' }}>
+              {layers.map(l => (
+                <div key={l.id} className="border rounded-xl" style={{ display:'flex', alignItems:'center', gap: 8, padding: 8, marginBottom: 8, background: activeLayerId === l.id ? 'rgba(0,0,0,.05)' : '#fff' }}>
+                  <input type="checkbox" checked={l.visible} onChange={()=> toggleLayerVisibility(l.id)} title="Mostrar/ocultar" />
+                  <button className="btn" style={{ flex: 1, textAlign:'left', fontWeight: activeLayerId === l.id ? 700 : 500 }} onClick={()=> setActiveLayer(l.id)} title="Ativar para edição">{l.name}</button>
+                  <button className="btn" onClick={()=> renameLayer(l)} title="Renomear">✎</button>
+                  <button className="btn" onClick={()=> deleteLayer(l)} title="Excluir">🗑</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,.1)', fontSize: 12, color: 'rgba(0,0,0,.6)' }}>
+              <div>• Arraste o fundo para mover o quadro.</div>
+              <div>• Roda do mouse faz zoom.</div>
+              <div>• Post-it arrasta para mover (posição global).</div>
+              <div>• Use @ no cartão para referenciar na camada ativa.</div>
+              <div>• Cor base na camada dona; nas referências, só override.</div>
+            </div>
+          </div>
+        );
+      }
+
+      function AppRoot() {
+        return (
+          <div style={{ position:'fixed', inset: 0 }}>
+            <Toolbar />
+            <LayerPanel />
+            <div ref={canvasRef} className="gridbg" style={{ position:'absolute', inset: 0 }} onMouseDown={onBackgroundMouseDown}></div>
+            {state.notes.map(n => <NoteCard key={n.id} note={n} />)}
+          </div>
+        );
+      }
+
+      ReactDOM.render(<AppRoot />, document.getElementById('root'));
+    </script>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>
