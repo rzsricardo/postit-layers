@@ -1,0 +1,20 @@
+
+html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, 'Helvetica Neue', Arial; }
+body { background: linear-gradient(#fafafa, #efefef); color: #111827; }
+#app { position: fixed; inset: 0; }
+.panel { background: rgba(255,255,255,.92); backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.08); border: 1px solid rgba(0,0,0,.12); border-radius: 14px; }
+.btn { padding: .375rem .75rem; border: 1px solid rgba(0,0,0,.12); border-radius: .75rem; background: #fff8; cursor: pointer; }
+.btn:hover { background: #fff; }
+#toolbar { position: fixed; top: 12px; left: 12px; z-index: 50; display: flex; gap: 8px; align-items: center; padding: 8px; }
+#layers { position: fixed; top: 12px; right: 12px; width: 300px; z-index: 50; padding: 12px; }
+#canvas { position: absolute; inset: 0; }
+.gridbg { background-size: 32px 32px; background-image:
+  linear-gradient(to right, rgba(0,0,0,0.04) 1px, transparent 1px),
+  linear-gradient(to bottom, rgba(0,0,0,0.04) 1px, transparent 1px);
+}
+.note { position: absolute; transform: translate(-50%, -50%); border: 1px solid rgba(0,0,0,.12); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.08); background: #fde68a; width: 180px; height: 140px; cursor: grab; }
+.note header { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; font-size: 13px; font-weight: 600; }
+.note textarea { width: 100%; height: calc(100% - 48px); padding: 10px; border: none; outline: none; background: transparent; font: inherit; font-size: 14px; resize: none; }
+.layer-row { display: flex; align-items: center; gap: 8px; padding: 8px; border: 1px solid rgba(0,0,0,.12); border-radius: 12px; margin-bottom: 8px; }
+.layer-row.active { background: rgba(0,0,0,.05); }
+.small { font-size: 12px; color: rgba(0,0,0,.6); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,.1); }
